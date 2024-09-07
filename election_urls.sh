@@ -1,7 +1,5 @@
 #!/bin/sh
 
-set -e
-
 urls='
 https://apnews.com/hub/donald-trump
 https://apnews.com/hub/kamala-harris
@@ -29,7 +27,6 @@ https://www.wsj.com/politics/elections
 https://www.cnbc.com/elections/
 https://www.cnn.com/politics
 https://electionline.org/
-https://www.usnews.com/topics/subjects/elections
 https://www.texastribune.org/series/texas-2024-election-voting/
 https://abcnews.go.com/elections
 https://www.nationalreview.com/2024-election/
@@ -116,6 +113,7 @@ https://apiavote.org/%E9%80%89%E4%B8%BE%E8%B5%84%E6%96%99/
 https://cn.wsj.com/zh-hans/news/collection/us-election-2024-cn-468898fc
 https://www.bbc.com/zhongwen/simp/world-69324800
 http://www.news.cn/world/20240404/d74169abb4324d4b930169cbdb6a0b52/c.html
+https://www.usnews.com/topics/subjects/elections
 '
 
 for url in $urls; do

@@ -14,6 +14,45 @@ import groq
 import metahtml
 import docsum
 
+from groq import Groq
+import os
+
+client = Groq(
+    api_key=os.environ.get("GROQ_API_KEY"),
+)
+
+def summarize_text(text):
+    chat_completion = client.chat.completions.create(
+        messages=[
+            {
+                'role': 'system',
+                'content': 'Summarize the input text below.  Limit the summary to 1 paragraph.  Use an advanced reading level similar to the input text, and ensure that all people, places, and other proper and dates nouns are included in the summary.  The summary should be in English.',
+            },
+            {
+                "role": "user",
+                "content": text,
+            }
+        ],
+        model="llama3-8b-8192",
+    )
+    return chat_completion.choices[0].message.content
+
+def translate_text(text):
+    chat_completion = client.chat.completions.create(
+        messages=[
+            {
+                'role': 'system',
+                'content': 'You are a professional translator working for the United Nations.  The following document is an important news article that needs to be translated into English.  Provide a professional translation.',
+            },
+            {
+                "role": "user",
+                "content": text,
+            }
+        ],
+        model="llama3-8b-8192",
+    )
+    return chat_completion.choices[0].message.content
+
 
 class ArticleDB:
     '''
@@ -49,7 +88,7 @@ class ArticleDB:
             sql = '''
             CREATE VIRTUAL TABLE articles
             USING FTS5
-            (title, text, hostname, url, publish_date, crawl_date, lang, en_summary);
+            (title, text, hostname, url, publish_date, crawl_date, lang, en_translation, en_summary);
             '''
             self.db.execute(sql)
             self.db.commit()
@@ -111,6 +150,7 @@ class ArticleDB:
 
         if info['type'] != 'article' or len(info['content']['text']) < 100:
             logging.debug(f'not an article... skipping')
+            en_translation = None
             en_summary = None
             info['title'] = None
             info['content'] = {'text': None}
@@ -118,12 +158,16 @@ class ArticleDB:
             info['language'] = None
         else:
             logging.debug('summarizing')
-            en_summary = docsum.summarize_text(info['content']['text'])
+            if not info['language'].startswith('en'):
+                en_translation = translate_text(info['content']['text'])
+            else:
+                en_translation = None
+            en_summary = summarize_text(info['content']['text'])
 
         logging.debug('inserting into database')
         sql = '''
-        INSERT INTO articles(title, text, hostname, url, publish_date, crawl_date, lang, en_summary)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+        INSERT INTO articles(title, text, hostname, url, publish_date, crawl_date, lang, en_translation, en_summary)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
         '''
         self._logsql(sql)
         cursor = self.db.cursor()
@@ -135,6 +179,7 @@ class ArticleDB:
             info['timestamp.published']['lo'],
             datetime.datetime.now().isoformat(),
             info['language'],
+            en_translation,
             en_summary,
             ])
         self.db.commit()
@@ -175,7 +220,11 @@ if __name__ == '__main__':
     parser.add_argument('url')
     args = parser.parse_args()
 
-    logging.basicConfig( level=args.loglevel.upper() )
+    logging.basicConfig(
+        format='%(asctime)s %(levelname)-8s %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        level=args.loglevel.upper(),
+        )
 
     db = ArticleDB(args.db)
-    db.add_url(args.url, recursive_depth=args.recursive_depth)
+    db.add_url(args.url, recursive_depth=args.recursive_depth, allow_dupes=True)
