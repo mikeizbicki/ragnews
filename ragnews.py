@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 import datetime
 import logging
+import re
 import requests
 import sqlite3
 
@@ -17,12 +18,73 @@ import docsum
 from groq import Groq
 import os
 
+
+################################################################################
+# MARK: LLM functions
+################################################################################
+
 client = Groq(
     api_key=os.environ.get("GROQ_API_KEY"),
 )
 
 
-def catch_errors(func):
+def run_llm(system, user, model='llama3-8b-8192', seed=None):
+    chat_completion = client.chat.completions.create(
+        messages=[
+            {
+                'role': 'system',
+                'content': system,
+            },
+            {
+                "role": "user",
+                "content": user,
+            }
+        ],
+        model=model,
+        seed=seed,
+    )
+    return chat_completion.choices[0].message.content
+
+
+def summarize_text(text):
+    system = 'Summarize the input text below.  Limit the summary to 1 paragraph.  Use an advanced reading level similar to the input text, and ensure that all people, places, and other proper and dates nouns are included in the summary.  The summary should be in English.'
+    return run_llm(system, text)
+
+
+def translate_text(text):
+    system = 'You are a professional translator working for the United Nations.  The following document is an important news article that needs to be translated into English.  Provide a professional translation.'
+    return run_llm(system, text)
+
+
+def extract_keywords(text, seed=None):
+    r'''
+    This is a helper function for RAG.
+    Given an input text,
+    this function extracts the keywords that will be used to perform the search for articles that will be used in RAG.
+
+    >>> extract_keywords('Who is the current democratic presidential nominee?', seed=0)
+    'Joe candidate nominee presidential Democrat election primary TBD voting politics'
+    >>> extract_keywords('What is the policy position of Trump related to illegal Mexican immigrants?', seed=0)
+    'Trump Mexican immigrants policy position illegal border control deportation walls'
+    '''
+    system = 'Extract the most important 10 words from the user prompt.  All names and other proper nouns should be included in the output list.  For non-proper nouns, synonyms and related words should also appear in the output.  Each word should appear on a line by itself, with no numbering or other formatting.  Do not provide an explanation of what you did, only provide the list of words in the proper format.'
+    user = text
+    rex = re.compile(r'\W+')
+    results = run_llm(system, user, seed=seed)
+    return rex.sub(' ', results)
+
+
+################################################################################
+# MARK: helper functions
+################################################################################
+
+def _logsql(sql):
+    rex = re.compile(r'\W+')
+    sql_dewhite = rex.sub(' ', sql)
+    logging.debug(f'SQL: {sql_dewhite}')
+
+
+def _catch_errors(func):
     def inner_function(*args, **kwargs):
         try:
             func(*args, **kwargs)
@@ -31,56 +93,69 @@ def catch_errors(func):
     return inner_function
 
 
-def summarize_text(text):
-    chat_completion = client.chat.completions.create(
-        messages=[
-            {
-                'role': 'system',
-                'content': 'Summarize the input text below.  Limit the summary to 1 paragraph.  Use an advanced reading level similar to the input text, and ensure that all people, places, and other proper and dates nouns are included in the summary.  The summary should be in English.',
-            },
-            {
-                "role": "user",
-                "content": text,
-            }
-        ],
-        model="llama3-8b-8192",
-    )
-    return chat_completion.choices[0].message.content
+################################################################################
+# MARK: rag
+################################################################################
 
-def translate_text(text):
-    chat_completion = client.chat.completions.create(
-        messages=[
-            {
-                'role': 'system',
-                'content': 'You are a professional translator working for the United Nations.  The following document is an important news article that needs to be translated into English.  Provide a professional translation.',
-            },
-            {
-                "role": "user",
-                "content": text,
-            }
-        ],
-        model="llama3-8b-8192",
-    )
-    return chat_completion.choices[0].message.content
+
+def rag(text, db):
+
+    keywords = extract_keywords(text)
+
+    articles = db.find_articles(keywords)
+    user = ''
+    for i, article in enumerate(articles):
+        user += f'''
+ARTICLE{i}_URL: {article['url']}
+ARTICLE{i}_TITLE: {article['title']}
+ARTICLE{i}_SUMMARY: {article['en_summary']}
+'''
+
+    user += f'''
+QUESTION: {text}
+    '''
+    
+    system = f'You are a professional news commentator answering questions about current events.  Your audience is well educated, but they have not been following the news closely.  Below, you are given a question and several related news articles.   The current date is now {datetime.datetime.now().isoformat()}, and these news articles are all contain new information about the world since you were last trained.  Your job is to answer the question in an unbiased manner using the new information provided in the news articles.  Your final answer should not mention that you are summarizing news articles, just provide the information the way a professional news commentator would provide it.  Your answers should be short and to the point.  Do not provide any extra commentary unless asked.'
+
+    return run_llm(system, user)
 
 
 class ArticleDB:
     '''
+    This class represents a database of news articles.
+    It is backed by sqlite3 and designed to have no external dependencies and be easy to understand.
 
     The following example shows how to add urls to the database.
 
     >>> db = ArticleDB()
+    >>> len(db)
+    0
     >>> db.add_url(ArticleDB._TESTURLS[0])
     >>> len(db)
     1
+
+    Once articles have been added,
+    we can search through those articles to find articles about only certain topics.
+
+    >>> articles = db.find_articles('Economía')
+
+    The output is a list of articles that match the search query.
+    Each article is represented by a dictionary with a number of fields about the article.
+
+    >>> articles[0]['title']
+    'La creación de empleo defrauda en Estados Unidos en agosto y aviva el temor a una recesión | Economía | EL PAÍS'
+    >>> articles[0].keys()
+    ['rowid', 'rank', 'title', 'publish_date', 'hostname', 'url', 'staleness', 'timebias', 'en_summary']
     '''
 
     _TESTURLS = [
         'https://elpais.com/economia/2024-09-06/la-creacion-de-empleo-defrauda-en-estados-unidos-en-agosto-y-aviva-el-fantasma-de-la-recesion.html',
+        'https://www.cnn.com/2024/09/06/politics/american-push-israel-hamas-deal-analysis/index.html',
         ]
 
     def __init__(self, filename=':memory:'):
         self.db = sqlite3.connect(filename)
+        self.db.row_factory=sqlite3.Row
         self.logger = logging
         self._create_schema()
 
@@ -97,8 +172,17 @@ class ArticleDB:
         try:
             sql = '''
             CREATE VIRTUAL TABLE articles
-            USING FTS5
-            (title, text, hostname, url, publish_date, crawl_date, lang, en_translation, en_summary);
+            USING FTS5 (
+                title,
+                text,
+                hostname,
+                url,
+                publish_date,
+                crawl_date,
+                lang,
+                en_translation,
+                en_summary
+                );
             '''
             self.db.execute(sql)
             self.db.commit()
@@ -108,7 +192,33 @@ class ArticleDB:
         except sqlite3.OperationalError:
             self.logger.debug('CREATE TABLE failed')
 
-    @catch_errors
+    def find_articles(self, query, limit=10, timebias_alpha=99999999):
+        '''
+        Return a list of articles in the database that match the specified query.
+        '''
+
+        sql = '''
+        SELECT
+            rowid,
+            rank,
+            title,
+            publish_date,
+            hostname,
+            url,
+            MAX(1, abs(MIN(JULIANDAY(publish_date), JULIANDAY(crawl_date)) - JULIANDAY(date('now')))) AS staleness,
+            (?)/(? + MAX(1, abs(MIN(JULIANDAY(publish_date), JULIANDAY(crawl_date)) - JULIANDAY(date('now'))))) AS timebias,
+            en_summary
+        FROM articles(?)
+        WHERE text IS NOT NULL
+        ORDER BY rank*timebias ASC
+        LIMIT ?;
+        '''
+        _logsql(sql)
+        cursor = self.db.cursor()
+        cursor.execute(sql, [timebias_alpha,timebias_alpha,query, limit])
+        return cursor.fetchall()
+
+    @_catch_errors
     def add_url(self, url, recursive_depth=0, allow_dupes=False):
         '''
         Download the url, extract various metainformation, and add the metainformation into the db.
@@ -137,7 +247,7 @@ class ArticleDB:
             sql = '''
             SELECT count(*) FROM articles WHERE url=?;
             '''
-            self._logsql(sql)
+            _logsql(sql)
             cursor = self.db.cursor()
             cursor.execute(sql, [url])
             row = cursor.fetchone()
@@ -181,7 +291,7 @@ class ArticleDB:
         INSERT INTO articles(title, text, hostname, url, publish_date, crawl_date, lang, en_translation, en_summary)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
         '''
-        self._logsql(sql)
+        _logsql(sql)
         cursor = self.db.cursor()
         cursor.execute(sql, [
             info['title'],
@@ -205,22 +315,17 @@ class ArticleDB:
                 if hostname in hostname2 or hostname2 in hostname:
                     self.add_url(url2, recursive_depth-1)
         
-
     def __len__(self):
         sql = '''
-        SELECT count(*) FROM articles;
+        SELECT count(*)
+        FROM articles
+        WHERE text IS NOT NULL;
         '''
-        self._logsql(sql)
+        _logsql(sql)
         cursor = self.db.cursor()
         cursor.execute(sql)
         row = cursor.fetchone()
         return row[0]
-
-    def _logsql(self, sql):
-        import re
-        rex = re.compile(r'\W+')
-        sql_dewhite = rex.sub(' ', sql)
-        self.logger.debug(f'SQL: {sql_dewhite}')
 
 
 if __name__ == '__main__':
