@@ -21,6 +21,16 @@ client = Groq(
     api_key=os.environ.get("GROQ_API_KEY"),
 )
 
+
+def catch_errors(func):
+    def inner_function(*args, **kwargs):
+        try:
+            func(*args, **kwargs)
+        except Exception as e:
+            logging.error(str(e))
+    return inner_function
+
+
 def summarize_text(text):
     chat_completion = client.chat.completions.create(
         messages=[
@@ -98,6 +108,7 @@ class ArticleDB:
         except sqlite3.OperationalError:
             self.logger.debug('CREATE TABLE failed')
 
+    @catch_errors
     def add_url(self, url, recursive_depth=0, allow_dupes=False):
         '''
         Download the url, extract various metainformation, and add the metainformation into the db.
@@ -139,6 +150,7 @@ class ArticleDB:
         try:
             response = requests.get(url)
         except requests.exceptions.MissingSchema:
+            # if no schema was provided in the url, add a default
             url = 'https://' + url
             response = requests.get(url)
         parsed_uri = urlparse(url)

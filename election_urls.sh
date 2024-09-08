@@ -1,5 +1,6 @@
 #!/bin/sh
 
+#https://www.washingtonpost.com/elections/election-2024/
 urls='
 https://apnews.com/hub/donald-trump
 https://apnews.com/hub/kamala-harris
@@ -13,7 +14,6 @@ https://www.la-prensa.com.mx/tags/temas/Elecciones_Estados_Unidos
 https://www.cronica.com.mx/temas/estados-unidos/2
 https://www.jornada.com.mx/tag/estados%20unidos
 https://calmatters.org/category/politics/elections/
-https://www.washingtonpost.com/elections/election-2024/
 https://www.nbcnews.com/politics/2024-presidential-election
 https://www.bbc.com/news/topics/cj3ergr8209t
 https://abcnews.go.com/Elections
@@ -118,5 +118,5 @@ https://www.usnews.com/topics/subjects/elections
 
 for url in $urls; do
     echo url
-    python3 ragnews.py $url --recursive_depth=1 --db=elections.db
+    python3 ragnews.py $url --recursive_depth=1 --db=elections.db --loglevel=DEBUG
 done
