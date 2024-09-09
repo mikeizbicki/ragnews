@@ -118,6 +118,12 @@ def rag(text, db):
     '''
     This function uses retrieval augmented generation (RAG) to generate an LLM response to the input text.
     The db argument should be an instance of the `ArticleDB` class that contains the relevant documents to use.
+
+    NOTE:
+    There are no test cases because:
+    1. the answers are non-deterministic (both because of the LLM and the database), and
+    2. evaluating the quality of answers automatically is non-trivial.
+
     '''
 
     # FIXME:
