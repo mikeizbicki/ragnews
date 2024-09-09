@@ -70,11 +70,13 @@ def extract_keywords(text, seed=None):
     >>> extract_keywords('What is the policy position of Trump related to illegal Mexican immigrants?', seed=0)
     'Trump Mexican immigrants policy position illegal border control deportation walls'
     '''
-    system = 'Extract the most important 10 words from the user prompt.  All names and other proper nouns should be included in the output list.  For non-proper nouns, synonyms and related words should also appear in the output.  Each word should appear on a line by itself, with no numbering or other formatting.  Do not provide an explanation of what you did, only provide the list of words in the proper format.'
-    user = text
-    rex = re.compile(r'\W+')
-    results = run_llm(system, user, seed=seed)
-    return rex.sub(' ', results)
+
+    # FIXME:
+    # Implement this function.
+    # It's okay if you don't get the exact same keywords as me.
+    # You probably certainly won't because you probably won't come up with the exact same prompt as me.
+    # To make the test cases above pass,
+    # you'll have to modify them to be what the output of your prompt provides.
 
 
 ################################################################################
@@ -107,24 +109,8 @@ def rag(text, db):
     The db argument should be an instance of the `ArticleDB` class that contains the relevant documents to use.
     '''
 
-    keywords = extract_keywords(text)
-
-    articles = db.find_articles(keywords)
-    user = ''
-    for i, article in enumerate(articles):
-        user += f'''
-ARTICLE{i}_URL: {article['url']}
-ARTICLE{i}_TITLE: {article['title']}
-ARTICLE{i}_SUMMARY: {article['text']}
-'''
-
-    user += f'''
-QUESTION: {text}
-    '''
-    
-    system = f'You are a professional news commentator answering questions about current events.  Your audience is well educated American citizens, but they have not been following the news closely.  Below, you are given a question and several related news articles.   The current date is now {datetime.datetime.now().isoformat()}, and these news articles are all contain new information about the world since you were last trained.  Your job is to answer the question in an unbiased manner using the new information provided in the news articles.  As much as practical, you should use only knowledge contained in the news articles and not background knowledge, because the background knowledge might be out of date.  Your final answer should not mention that you are summarizing news articles, just provide the information the way a professional news commentator would provide it.  Do not provide citations.  Your answers should be short and to the point.  They should be at most 1 paragraph, and preferably only 1-2 sentences.  Do not provide any extra commentary unless asked.  It is okay to provide opinions about controversial subjects such as who to vote for as long as those opinions are grounded in facts specified in both the user prompt and the news articles.  If there is not enough information in the user prompt, then ask for the specified information to be provided.'
-
-    return run_llm(system, user)
+    # FIXME:
+    # Implement this function.
 
 
 class ArticleDB:
@@ -206,27 +192,9 @@ class ArticleDB:
         Lowering the value of the timebias_alpha parameter will result in the time becoming more influential.
         '''
 
-        sql = '''
-        SELECT
-            rowid,
-            rank,
-            title,
-            publish_date,
-            hostname,
-            url,
-            MAX(1, abs(MIN(JULIANDAY(publish_date), JULIANDAY(crawl_date)) - JULIANDAY(date('now')))) AS staleness,
-            (?)/(? + MAX(1, abs(MIN(JULIANDAY(publish_date), JULIANDAY(crawl_date)) - JULIANDAY(date('now'))))) AS timebias,
-            en_summary,
-            text
-        FROM articles(?)
-        WHERE text IS NOT NULL
-        ORDER BY rank*timebias ASC
-        LIMIT ?;
-        '''
-        _logsql(sql)
-        cursor = self.db.cursor()
-        cursor.execute(sql, [timebias_alpha,timebias_alpha,query, limit])
-        return cursor.fetchall()
+        # FIXME:
+        # Implement this function.
+        # You do not need to concern yourself with the timebias_alpha parameter.
 
     @_catch_errors
     def add_url(self, url, recursive_depth=0, allow_dupes=False):
