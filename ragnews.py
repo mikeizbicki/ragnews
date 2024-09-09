@@ -1,7 +1,10 @@
 #!/bin/python3
 
 '''
-Run an interactive QA session with the news articles contained in the specified database.
+Run an interactive QA session with the news articles using the Groq LLM API and retrieval augmented generation (RAG).
+
+New articles can be added to the database with the --add_url parameter,
+and the path to the database can be changed with the --db parameter.
 '''
 
 from bs4 import BeautifulSoup
@@ -49,9 +52,9 @@ def run_llm(system, user, model='llama3-8b-8192', seed=None):
     return chat_completion.choices[0].message.content
 
 
-def summarize_text(text):
+def summarize_text(text, seed=None):
     system = 'Summarize the input text below.  Limit the summary to 1 paragraph.  Use an advanced reading level similar to the input text, and ensure that all people, places, and other proper and dates nouns are included in the summary.  The summary should be in English.'
-    return run_llm(system, text)
+    return run_llm(system, text, seed=seed)
 
 
 def translate_text(text):
@@ -69,6 +72,9 @@ def extract_keywords(text, seed=None):
     'Joe candidate nominee presidential Democrat election primary TBD voting politics'
     >>> extract_keywords('What is the policy position of Trump related to illegal Mexican immigrants?', seed=0)
     'Trump Mexican immigrants policy position illegal border control deportation walls'
+
+    Note that the examples above are passing in a seed value for deterministic results.
+    In production, you probably do not want to specify the seed.
     '''
 
     # FIXME:
@@ -90,6 +96,11 @@ def _logsql(sql):
 
 
 def _catch_errors(func):
+    '''
+    This function is intended to be used as a decorator.
+    It traps whatever errors the input function raises and logs the errors.
+    We use this decorator on the add_urls method below to ensure that a webcrawl continues even if there are errors.
+    '''
     def inner_function(*args, **kwargs):
         try:
             func(*args, **kwargs)
@@ -111,6 +122,18 @@ def rag(text, db):
 
     # FIXME:
     # Implement this function.
+    # Recall that your RAG system should:
+    # 1. Extract keywords from the text.
+    # 2. Use those keywords to find articles related to the text.
+    # 3. Construct a new user prompt that includes all of the articles and the original text.
+    # 4. Pass the new prompt to the LLM and return the result.
+    #
+    # HINT:
+    # You will also have to write your own system prompt to use with the LLM.
+    # I needed a fairly long system prompt (about 15 lines) in order to get good results.
+    # You can start with a basic system prompt right away just to check if things are working,
+    # but don't spend a lot of time on the system prompt until you're sure everything else is working.
+    # Then, you can iteratively add more commands into the system prompt to correct "bad" behavior you see in your program's output.
 
 
 class ArticleDB:
@@ -190,11 +213,22 @@ class ArticleDB:
         Return a list of articles in the database that match the specified query.
 
         Lowering the value of the timebias_alpha parameter will result in the time becoming more influential.
+        The final ranking is computed by the FTS5 rank * timebias_alpha / (days since article publication + timebias_alpha).
         '''
-
+        
         # FIXME:
         # Implement this function.
         # You do not need to concern yourself with the timebias_alpha parameter.
+        # (Although I encourage you to try!)
+        #
+        # HINT:
+        # The only thing my solution does is pass a SELECT statement to the sqlite3 database.
+        # The SELECT statement will need to use sqlite3's FTS5 syntax for full text search.
+        # If you need to review how to coordinate sqlite3 and python,
+        # there is an example in the __len__ method below.
+        # The details of the SELECT statement will be different
+        # (because the functions collect different information)
+        # but the outline of the python code is the same.
 
     @_catch_errors
     def add_url(self, url, recursive_depth=0, allow_dupes=False):
