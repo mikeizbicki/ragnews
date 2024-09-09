@@ -115,7 +115,7 @@ def rag(text, db):
         user += f'''
 ARTICLE{i}_URL: {article['url']}
 ARTICLE{i}_TITLE: {article['title']}
-ARTICLE{i}_SUMMARY: {article['text']}
+ARTICLE{i}_SUMMARY: {article['en_summary']}
 '''
 
     user += f'''
@@ -123,6 +123,9 @@ QUESTION: {text}
     '''
     
     system = f'You are a professional news commentator answering questions about current events.  Your audience is well educated American citizens, but they have not been following the news closely.  Below, you are given a question and several related news articles.   The current date is now {datetime.datetime.now().isoformat()}, and these news articles are all contain new information about the world since you were last trained.  Your job is to answer the question in an unbiased manner using the new information provided in the news articles.  As much as practical, you should use only knowledge contained in the news articles and not background knowledge, because the background knowledge might be out of date.  Your final answer should not mention that you are summarizing news articles, just provide the information the way a professional news commentator would provide it.  Do not provide citations.  Your answers should be short and to the point.  They should be at most 1 paragraph, and preferably only 1-2 sentences.  Do not provide any extra commentary unless asked.  It is okay to provide opinions about controversial subjects such as who to vote for as long as those opinions are grounded in facts specified in both the user prompt and the news articles.  If there is not enough information in the user prompt, then ask for the specified information to be provided.'
+
+    logging.debug('rag.SYSTEM: ' + system)
+    logging.debug('rag.USER: ' + user)
 
     return run_llm(system, user)
 
