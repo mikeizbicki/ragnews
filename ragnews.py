@@ -1,6 +1,7 @@
 #!/bin/python3
 
 '''
+Run an interactive QA session with the news articles contained in the specified database.
 '''
 
 from bs4 import BeautifulSoup
@@ -13,14 +14,13 @@ import sqlite3
 
 import groq
 import metahtml
-import docsum
 
 from groq import Groq
 import os
 
 
 ################################################################################
-# MARK: LLM functions
+# LLM functions
 ################################################################################
 
 client = Groq(
@@ -29,6 +29,9 @@ client = Groq(
 
 
 def run_llm(system, user, model='llama3-8b-8192', seed=None):
+    '''
+    This is a helper function for all the uses of LLMs in this file.
+    '''
     chat_completion = client.chat.completions.create(
         messages=[
             {
@@ -75,7 +78,7 @@ def extract_keywords(text, seed=None):
 
 
 ################################################################################
-# MARK: helper functions
+# helper functions
 ################################################################################
 
 def _logsql(sql):
@@ -94,11 +97,15 @@ def _catch_errors(func):
 
 
 ################################################################################
-# MARK: rag
+# rag
 ################################################################################
 
 
 def rag(text, db):
+    '''
+    This function uses retrieval augmented generation (RAG) to generate an LLM response to the input text.
+    The db argument should be an instance of the `ArticleDB` class that contains the relevant documents to use.
+    '''
 
     keywords = extract_keywords(text)
 
@@ -108,14 +115,14 @@ def rag(text, db):
         user += f'''
 ARTICLE{i}_URL: {article['url']}
 ARTICLE{i}_TITLE: {article['title']}
-ARTICLE{i}_SUMMARY: {article['en_summary']}
+ARTICLE{i}_SUMMARY: {article['text']}
 '''
 
     user += f'''
 QUESTION: {text}
     '''
     
-    system = f'You are a professional news commentator answering questions about current events.  Your audience is well educated, but they have not been following the news closely.  Below, you are given a question and several related news articles.   The current date is now {datetime.datetime.now().isoformat()}, and these news articles are all contain new information about the world since you were last trained.  Your job is to answer the question in an unbiased manner using the new information provided in the news articles.  Your final answer should not mention that you are summarizing news articles, just provide the information the way a professional news commentator would provide it.  Your answers should be short and to the point.  Do not provide any extra commentary unless asked.'
+    system = f'You are a professional news commentator answering questions about current events.  Your audience is well educated American citizens, but they have not been following the news closely.  Below, you are given a question and several related news articles.   The current date is now {datetime.datetime.now().isoformat()}, and these news articles are all contain new information about the world since you were last trained.  Your job is to answer the question in an unbiased manner using the new information provided in the news articles.  As much as practical, you should use only knowledge contained in the news articles and not background knowledge, because the background knowledge might be out of date.  Your final answer should not mention that you are summarizing news articles, just provide the information the way a professional news commentator would provide it.  Do not provide citations.  Your answers should be short and to the point.  They should be at most 1 paragraph, and preferably only 1-2 sentences.  Do not provide any extra commentary unless asked.  It is okay to provide opinions about controversial subjects such as who to vote for as long as those opinions are grounded in facts specified in both the user prompt and the news articles.  If there is not enough information in the user prompt, then ask for the specified information to be provided.'
 
     return run_llm(system, user)
 
@@ -192,9 +199,11 @@ class ArticleDB:
         except sqlite3.OperationalError:
             self.logger.debug('CREATE TABLE failed')
 
-    def find_articles(self, query, limit=10, timebias_alpha=99999999):
+    def find_articles(self, query, limit=10, timebias_alpha=1):
         '''
         Return a list of articles in the database that match the specified query.
+
+        Lowering the value of the timebias_alpha parameter will result in the time becoming more influential.
         '''
 
         sql = '''
@@ -207,7 +216,8 @@ class ArticleDB:
             url,
             MAX(1, abs(MIN(JULIANDAY(publish_date), JULIANDAY(crawl_date)) - JULIANDAY(date('now')))) AS staleness,
             (?)/(? + MAX(1, abs(MIN(JULIANDAY(publish_date), JULIANDAY(crawl_date)) - JULIANDAY(date('now'))))) AS timebias,
-            en_summary
+            en_summary,
+            text
         FROM articles(?)
         WHERE text IS NOT NULL
         ORDER BY rank*timebias ASC
@@ -330,11 +340,11 @@ class ArticleDB:
 
 if __name__ == '__main__':
     import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--loglevel', default='info')
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--loglevel', default='warning')
     parser.add_argument('--db', default='ragnews.db')
     parser.add_argument('--recursive_depth', default=0, type=int)
-    parser.add_argument('url')
+    parser.add_argument('--add_url', help='If this parameter is added, then the program will not provide an interactive QA session with the database.  Instead, the provided url will be downloaded and added to the database.')
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -344,4 +354,14 @@ if __name__ == '__main__':
         )
 
     db = ArticleDB(args.db)
-    db.add_url(args.url, recursive_depth=args.recursive_depth, allow_dupes=True)
+
+    if args.add_url:
+        db.add_url(args.add_url, recursive_depth=args.recursive_depth, allow_dupes=True)
+
+    else:
+        import readline
+        while True:
+            text = input('ragnews> ')
+            if len(text.strip()) > 0:
+                output = rag(text, db)
+                print(output)
