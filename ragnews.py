@@ -7,16 +7,13 @@ New articles can be added to the database with the --add_url parameter,
 and the path to the database can be changed with the --db parameter.
 '''
 
-from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 import datetime
 import logging
 import re
-import requests
 import sqlite3
 
 import groq
-import metahtml
 
 from groq import Groq
 import os
@@ -258,6 +255,9 @@ class ArticleDB:
         3
 
         '''
+        from bs4 import BeautifulSoup
+        import requests
+        import metahtml
         logging.info(f'add_url {url}')
 
         if not allow_dupes:
