@@ -114,12 +114,6 @@ https://www.bbc.com/zhongwen/simp/world-69324800
 http://www.news.cn/world/20240404/d74169abb4324d4b930169cbdb6a0b52/c.html
 '
 
-urls='
-https://tsl.news/
-https://www.claremontindependent.com/
-https://www.cmcforum.com/
-'
-
 # These urls fail for some reason
 bad_urls='
 https://www.washingtonpost.com/elections/election-2024/
