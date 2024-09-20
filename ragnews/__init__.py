@@ -28,7 +28,7 @@ client = Groq(
 )
 
 
-def run_llm(system, user, model='llama3-8b-8192', seed=None):
+def run_llm(system, user, model='llama-3.1-70b-versatile', seed=None):
     '''
     This is a helper function for all the uses of LLMs in this file.
     '''
@@ -117,11 +117,14 @@ def _catch_errors(func):
 ################################################################################
 
 
-def rag(text, db):
+def rag(text, db, keywords_text=None):
     '''
     This function uses retrieval augmented generation (RAG) to generate an LLM response to the input text.
     The db argument should be an instance of the `ArticleDB` class that contains the relevant documents to use.
     '''
+
+    if keywords_text is None:
+        keywords_text = text
 
     # FIXME:
     # Implement this function.
@@ -138,9 +141,10 @@ def rag(text, db):
     # but don't spend a lot of time on the system prompt until you're sure everything else is working.
     # Then, you can iteratively add more commands into the system prompt to correct "bad" behavior you see in your program's output.
 
-    keywords = extract_keywords(text)
+    keywords = extract_keywords(keywords_text)
 
     articles = db.find_articles(keywords)
+    assert(len(articles) > 0)
     user = ''
     for i, article in enumerate(articles):
         user += f'''
